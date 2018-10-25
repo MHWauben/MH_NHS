@@ -1,0 +1,58 @@
+---
+title: "MH NHS data exploration"
+output: html_notebook
+---
+
+
+
+```{r setup}
+library(readxl)
+library(dplyr)
+library(zoo)
+library(ggplot2)
+```
+
+
+```{r load data}
+table_1 <- readxl::read_excel("mhb_-_1617-_metadata_and_data_quality_tables.xlsx",
+                   sheet = "Table 1",
+                   col_names = FALSE, 
+                   skip = 24) 
+
+code_lookup <- table_1 %>%
+  filter(!(is.na(X__1))) %>%
+  select(X__1, X__2) %>%
+  mutate(X__2 = as.character(X__2))
+code_lookup$X__2[is.na(code_lookup$X__2)] <- code_lookup$X__1[is.na(code_lookup$X__2)]
+code_lookup[1:3, 2] <- "England"
+
+table_1 <- table_1 %>%
+  mutate(X__1 = zoo::na.locf(X__1)) %>%
+  left_join(code_lookup, by = "X__1") 
+colnames(table_1) <- c("trust_code", "case_code", "April_2016", "May_2016", "June_2016", "July_2016", "August_2016", "September_2016", "October_2016", "November_2016", "December_2016", "January_2017", "February_2017", "March_2017", "trust_name")
+
+table_1 <- as.data.frame(apply(table_1, 2, function(x) gsub("\\*", NA, x)))
+table_1 <- table_1[3:nrow(table_1), ]
+table_1$case_code <- as.character(table_1$case_code)
+
+for(i in seq(from = 3, to = 14, by = 1)) {
+  table_1[,i] <- as.numeric(as.character(table_1[,i]))
+}
+
+table_1$Total <- rowSums(table_1[, 3:14])
+
+table_1$case_code[table_1$case_code %in% as.vector(code_lookup$X__2)] <- "Total"
+```
+
+
+
+
+```{r visualise}
+ggplot(table_1 %>% 
+         filter(case_code == "MHS507SelfHarm") %>% 
+         filter(!is.na(Total)), 
+       aes(x = reorder(trust_name, -Total), y = Total))+
+  geom_histogram(stat = "identity")+
+  coord_flip()
+```
+
